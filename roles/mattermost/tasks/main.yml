@@ -12,33 +12,106 @@
     creates: /tmp/mattermost-team-{{ mattermost_version }}-linux-amd64.tar.gz
   when: (ansible_os_family == "RedHat" and ansible_distribution_major_version is version("6", "=")) or (ansible_distribution == "Ubuntu" and ansible_distribution_major_version is version("14", "="))
 
-- name: unpack mattermost archive
-  unarchive:
-    src: /tmp/mattermost-team-{{ mattermost_version }}-linux-amd64.tar.gz
-    dest: /opt/
-    copy: no
-  args:
-    creates: /opt/mattermost/bin/platform
-
-- name: Edit /opt/mattermost/config/config.json
-  lineinfile:
-    dest: /opt/mattermost/config/config.json
-    regexp: '"DriverName": "mysql",'
-    line: '        "DriverName": "postgres",'
-    backrefs: yes
-
-- name: Edit /opt/mattermost/config/config.json
-  lineinfile:
-    dest: /opt/mattermost/config/config.json
-    regexp: '"DataSource":'
-    line: '        "DataSource": "postgres://{{ db_user }}:{{ db_password }}@127.0.0.1:5432/{{ db_name }}?sslmode=disable&connect_timeout=10",'
-    backrefs: yes
-
 - name: Create mattermost user
   user:
     name: "{{ mattermost_user }}"
     system: yes
     createhome: no
+
+- name: Create mattermost directory
+  file:
+    path: /opt/mattermost-{{ mattermost_version }}
+    owner: "{{ mattermost_user }}"
+    group: "{{ mattermost_user }}"
+    state: directory
+
+- name: Create special directories
+  file:
+    path: "/opt/mattermost_special/{{ item }}"
+    owner: "{{ mattermost_user }}"
+    group: "{{ mattermost_user }}"
+    state: directory
+  with_items: "{{ mattermost_special }}"
+
+- name: unpack mattermost archive
+  unarchive:
+    src: /tmp/mattermost-team-{{ mattermost_version }}-linux-amd64.tar.gz
+    dest: /opt/mattermost-{{ mattermost_version }}/
+    copy: no
+    owner: "{{ mattermost_user }}"
+    group: "{{ mattermost_user }}"
+  args:
+    creates: /opt/mattermost-{{ mattermost_version }}/mattermost/bin/platform
+
+- name: copy init config file
+  copy:
+    src: /opt/mattermost-{{ mattermost_version }}/mattermost/config/config.json
+    dest: /opt/mattermost_special/config/config.json
+    remote_src: true
+    owner: "{{ mattermost_user }}"
+    group: "{{ mattermost_user }}"
+    force: no
+
+- name: Check for current status
+  stat:
+    path: /opt/mattermost-{{ mattermost_version }}/mattermost/{{ item }}
+  register: _mattermost_stat
+  with_items: "{{ mattermost_special }}"
+
+- name: Remove special directories from mattermost
+  file:
+    path: /opt/mattermost-{{ mattermost_version }}/mattermost/{{ item.item }}
+    state: absent
+  when:
+    - item.stat.exists
+    - not item.stat.islnk
+  with_items: "{{ _mattermost_stat.results }}"
+
+- name: Symlink special directories to mattermost
+  file:
+    src: "/opt/mattermost_special/{{ item }}"
+    dest: "/opt/mattermost-{{ mattermost_version }}/mattermost/{{ item }}"
+    state: link
+  with_items: "{{ mattermost_special }}"
+  notify: restart mattermost
+
+- name: Symlink mattermost
+  file:
+    src: "/opt/mattermost-{{ mattermost_version }}/mattermost"
+    dest: "/opt/mattermost"
+    state: link
+  notify: restart mattermost
+
+- include_tasks: db_setup.yml
+  when:
+    - inventory_hostname == (groups['galera_all'] | intersect(ansible_play_hosts))[0]
+    - not mattermost_postgres | bool
+  vars:
+    _oslodb_setup_host: "{{ (groups['galera_all'] | intersect(ansible_play_hosts))[0] }}"
+    _oslodb_ansible_python_interpreter: "{{ ansible_python['executable'] }}"
+    _oslodb_databases:
+      - name: "{{ db_name }}"
+        users:
+          - username: "{{ db_user }}"
+            password: "{{ db_password }}"
+            host: "{{ db_host }}"
+
+- name: Edit /opt/mattermost_special/config/config.json
+  lineinfile:
+    dest: /opt/mattermost_special/config/config.json
+    regexp: '"DriverName": "mysql",'
+    line: '        "DriverName": "postgres",'
+    backrefs: yes
+  when: mattermost_postgres | bool
+  notify: restart mattermost
+
+- name: Edit /opt/mattermost_special/config/config.json
+  lineinfile:
+    dest: /opt/mattermost_special/config/config.json
+    regexp: '"DataSource":'
+    line: '        "DataSource": "{{ (db_driver == "postgres") | ternary(db_driver ~ "://", "") }}{{ db_user }}:{{ db_password }}@{{ db_connection }}/{{ db_name }}?{{ (db_driver == "postgres") | ternary(db_postgres_options, db_mysql_options) }}",'
+    backrefs: yes
+  notify: restart mattermost
 
 - name: Create mattermost SystemV init script (Ubuntu 14.04)
   template:
@@ -48,6 +121,7 @@
     group: root
     mode: 0755
   when: (ansible_distribution == "Ubuntu" and ansible_distribution_major_version is version("14", "="))
+  notify: restart mattermost
 
 - name: Create mattermost upstart init script (RHEL/CentOS 6)
   template:
@@ -57,6 +131,7 @@
     group: root
     mode: 0644
   when: (ansible_os_family == "RedHat" and ansible_distribution_major_version is version("6", "="))
+  notify: restart mattermost
 
 - name: Create mattermost systemd service (Ubuntu 16.04, RHEL/CentOS 7)
   template:
@@ -66,17 +141,4 @@
     group: root
     mode: 0664
   when: (ansible_os_family == "RedHat" and ansible_distribution_major_version is version("7", ">=")) or (ansible_distribution == "Ubuntu" and ansible_distribution_major_version is version("16", ">=")) or (ansible_distribution == "Debian" and ansible_distribution_major_version is version("8", ">="))
-
-- name: Change mattermost directory permissions
-  file:
-    path: /opt/mattermost
-    state: directory
-    owner: "{{ mattermost_user }}"
-    group: "{{ mattermost_user }}"
-    recurse: yes
-
-- name: Enable Mattermost service
-  service:
-    name: mattermost
-    enabled: yes
-    state: started
+  notify: restart mattermost

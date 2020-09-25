@@ -6,6 +6,17 @@
   package:
     name: nginx
     state: present
+  notify: start nginx
+
+- meta: flush_handlers
+
+- import_tasks: ssl.yml
+
+- name: remove nginx default site
+  file:
+    path: /etc/nginx/conf.d/default.conf
+    state: absent
+  notify: restart nginx
 
 - name: apply nginx config template to /etc/nginx/conf.d/mattermost.conf
   template:
@@ -27,8 +38,3 @@
   when: ansible_distribution == "RedHat"
   notify: restart nginx
 
-- name: remove nginx default site
-  file:
-    path: /etc/nginx/conf.d/default.conf
-    state: absent
-  notify: restart nginx

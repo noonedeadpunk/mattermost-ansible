@@ -1,0 +1,12 @@
+all:
+  children:
+    galera_all:
+      hosts:
+        mm1:
+          ansible_host:
+        mm2:
+          ansible_host:
+        mm3:
+          ansible_host:
+      vars:
+        galera_wsrep_address: "{{ ansible_default_ipv4.address }}"

@@ -1,38 +1,78 @@
 ---
+
+- hosts: localhost
+  become: no
+  vars:
+    mattermost_postgres: true
+  tasks:
+    - name: Place config_template
+      file:
+        src: "{{ item.src | default(omit) }}"
+        dest: "{{ item.dest | default(omit) }}"
+        state: "{{ item.state }}"
+        path: "{{ item.path | default(omit) }}"
+      with_items:
+        - path: "{{ ansible_env.HOME }}/.ansible/plugins/modules"
+          state: directory
+        - path: "{{ ansible_env.HOME }}/.ansible/plugins/action"
+          state: directory
+        - src: "{{ ansible_env.HOME }}/.ansible/roles/config_template/library/config_template"
+          dest: "{{ ansible_env.HOME }}/.ansible/plugins/modules/config_template"
+          state: hard
+        - src: "{{ ansible_env.HOME }}/.ansible/roles/config_template/action/config_template.py"
+          dest: "{{ ansible_env.HOME }}/.ansible/plugins/action/config_template.py"
+          state: hard
+      failed_when: false
+      when: not mattermost_postgres | bool
+
 # Define the host you want to run the playbook in a file called hosts
 # run "ansible-playbook play.yml -i hosts" from this directory
 - hosts: all
-  remote_user: root
+  serial: [1, '100%']
   gather_facts: no
   pre_tasks:
     - name: Install python
-      raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python3-minimal)
       changed_when: false
 
     - name: Gather Facts
       setup:
 
   vars:
-    mattermost_version: 4.3.2
-    postgres_version: 9.4
+    mattermost_version: 5.27.0
+    postgres_version: 9.6
 
-   # The user the mattermost process will run as. The group will match.
+    # The user the mattermost process will run as. The group will match.
     mattermost_user: mattermost
 
-   # These do not need to be edited.
-    db_user: mmmost
-    db_name: mattermost
+    mattermost_postgres: True
 
-   # Choose a secure password. It is recommended you create a random password using
-   # an external utility.
+    # Whether to install galera or postgres
+    galera_install_server: "{{ not mattermost_postgres | bool }}"
+    galera_install_client: "{{ not mattermost_postgres | bool }}"
+    galera_root_password: "secrete"
+    galera_cluster_name: mm_galera_cluster
+
     db_password: notReallyPassword
+    db_host: 127.0.0.1
 
-   # This is the email address you want to be attached to the letsencrypt certificate. It should be valid.
+    nginx_install: True
+
+    # This is the email address you want to be attached to the letsencrypt certificate. It should be valid.
     cert_email_address: abc@123.com
-
-  roles:
-    - postgres
-    - mattermost
-    - letsencrypt
-    - nginx
-    - cron
+    # source will pull certbot git repo, distro will try to install certbot from packages
+    cert_method: source
+    # cert_domain: domain.com
+    cert_local_path: "{{ ansible_env.HOME }}/.ansible/ssl"
+  tasks:
+    - include_role:
+        name: postgres
+      when: mattermost_postgres | bool
+    - include_role:
+        name: galera_server
+      when: not mattermost_postgres | bool
+    - include_role:
+        name: mattermost
+    - include_role:
+        name: nginx
+      when: nginx_install | bool

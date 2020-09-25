@@ -1,0 +1,23 @@
+---
+
+- name: Create destination directories
+  file:
+    path: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}"
+    mode: "0755"
+    state: directory
+
+- name: Distribute self signed ssl key
+  copy:
+    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/privkey.pem"
+    content: "{{ hostvars[groups['all'][0]]['ssl_key_fact'] | b64decode }}"
+    owner: "root"
+    group: "root"
+    mode: "0640"
+
+- name: Distribute self signed ssl cert
+  copy:
+    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"
+    content: "{{ hostvars[groups['all'][0]]['ssl_cert_fact'] | b64decode }}"
+    owner: "root"
+    group: "root"
+    mode: "0640"

@@ -1,5 +1,6 @@
 ---
-- name: start mattermost
+- name: restart mattermost
   service:
     name: mattermost
-    state: started
+    enabled: yes
+    state: restarted

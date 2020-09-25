@@ -1,0 +1,27 @@
+---
+
+- name: Create destination directories
+  file:
+    path: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}"
+    mode: "0755"
+    state: directory
+
+- name: Drop user provided ssl cert
+  copy:
+    src: "{{ user_ssl_cert }}"
+    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: user_ssl_cert is defined
+  notify: restart nginx
+
+- name: Drop user provided ssl key
+  copy:
+    src: "{{ user_ssl_key }}"
+    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/privkey.pem"
+    owner: "root"
+    group: "root"
+    mode: "0640"
+  when: user_ssl_key is defined
+  notify: restart nginx

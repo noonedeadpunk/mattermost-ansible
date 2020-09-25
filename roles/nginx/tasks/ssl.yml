@@ -1,0 +1,17 @@
+---
+
+- block:
+    - import_tasks: letsencrypt.yml
+      when: inventory_hostname == groups['all'][0]
+
+    - include_tasks: ssl_key_store.yml
+      when: inventory_hostname == groups['all'][0]
+
+    - include_tasks: ssl_key_distribute.yml
+      when: inventory_hostname != groups['all'][0]
+  when: nginx_letsencrypt | default(True)
+
+- import_tasks: ssl_user_provided.yml
+  when:
+    - user_ssl_cert is defined
+    - user_ssl_key is defined

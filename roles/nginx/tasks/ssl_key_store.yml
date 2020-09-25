@@ -1,0 +1,18 @@
+---
+
+- name: Store ssl cert
+  slurp:
+    src: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"
+  register: _ssl_cert
+  changed_when: false
+
+- name: Store ssl key
+  slurp:
+    src: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/privkey.pem"
+  register: _ssl_key
+  changed_when: false
+
+- name: Register a fact for the cert and key
+  set_fact:
+     ssl_cert_fact: "{{ _ssl_cert.content }}"
+     ssl_key_fact: "{{ _ssl_key.content }}"
