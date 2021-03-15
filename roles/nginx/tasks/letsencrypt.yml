@@ -85,11 +85,13 @@
   until: _result is success
   retries: 30
   delay: 3
+  when: inventory_hostname == groups['all'][0]
 
 - name: Get SSL certificate from letsencrypt
   command: "{{ letsencrypt_path }} certonly -c /etc/letsencrypt/cli.ini --agree-tos"
   args:
     creates: /etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem
+  when: inventory_hostname == groups['all'][0]
 
 - name: Create cron job to automatically update SSL cert (non-systemd)
   cron:

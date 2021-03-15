@@ -2,7 +2,6 @@
 
 - block:
     - import_tasks: letsencrypt.yml
-      when: inventory_hostname == groups['all'][0]
 
     - include_tasks: ssl_key_store.yml
       when: inventory_hostname == groups['all'][0]

@@ -1,0 +1,222 @@
+---
+
+heat_template_version: 2018-08-31
+description: Template with HA instances
+
+
+parameters:
+  key_name:
+    type: string
+    label: Key Name
+    description: Name of key-pair to be used for compute instance
+    constraints:
+      - custom_constraint: nova.keypair
+  image_id:
+    type: string
+    label: Image ID
+    description: Image to be used for compute instance
+    constraints:
+      - custom_constraint: glance.image
+  instance_type:
+    type: string
+    label: Instance Type
+    description: Type of instance (flavor) to be used
+    constraints:
+      - custom_constraint: nova.flavor
+  net_name:
+    type: string
+    default: srv_net
+    description: Prefix which will be used for network creation
+  count:
+    type: number
+    default: 3
+    description: Number of servers created
+  public_net:
+    type: string
+    default: ext-net
+    description: >
+      ID or name of public network for which floating IP addresses will be allocated
+
+resources:
+  sec_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 80
+        port_range_max: 80
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 443
+        port_range_max: 443
+      - remote_ip_prefix: 91.106.192.0/25
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+      - remote_ip_prefix: 91.123.199.0/24
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+      - remote_ip_prefix: 116.206.171.137/32
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+      - remote_ip_prefix: 188.95.230.126/32
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 3306
+        port_range_max: 3306
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 4567
+        port_range_max: 4567
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 4568
+        port_range_max: 4568
+      - remote_ip_prefix: { get_attr: [private_subnet, cidr] }
+        protocol: tcp
+        port_range_min: 4444
+        port_range_max: 4444
+
+  private_net:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: net_name }
+      
+  private_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: private_net }
+      cidr: "192.168.10.0/24"
+      gateway_ip: "192.168.10.1"
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info:
+        network: { get_param: public_net }
+
+  router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: private_subnet }
+
+  nova_server_group:
+    type: OS::Nova::ServerGroup
+    properties:
+      name: aa_group
+      policies: ["anti-affinity"]
+
+  server_group:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: { get_param: count }
+      resource_def:
+        type: ha_server.yaml
+        properties:
+          key_name: {get_param: key_name}
+          image_id: {get_param: image_id}
+          instance_type: {get_param: instance_type}
+          network: { get_resource: private_net }
+          server_group: { get_resource: nova_server_group }
+          security_group: { get_resource: sec_group }
+          subnet: {get_resource: private_subnet}
+          pool: {get_resource: pool}
+          pool_ssl: {get_resource: pool_ssl}
+          pool_galera: {get_resource: pool_galera}
+          public_net: {get_param: public_net}
+
+  monitor:
+    type: OS::Octavia::HealthMonitor
+    properties:
+      delay: 3
+      type: HTTP
+      timeout: 3
+      max_retries: 3
+      expected_codes: 200,301
+      pool: { get_resource: pool }
+
+  monitor_ssl:
+    type: OS::Octavia::HealthMonitor
+    properties:
+      delay: 3
+      type: HTTPS
+      timeout: 3
+      max_retries: 3
+      pool: { get_resource: pool_ssl }
+
+  monitor_galera:
+    type: OS::Octavia::HealthMonitor
+    properties:
+      delay: 3
+      type: TCP
+      timeout: 3
+      max_retries: 3
+      pool: { get_resource: pool_galera }
+
+  pool:
+    type: OS::Octavia::Pool
+    properties:
+      lb_algorithm: LEAST_CONNECTIONS
+      protocol: HTTP
+      listener: { get_resource: listener }
+
+  pool_ssl:
+    type: OS::Octavia::Pool
+    properties:
+      lb_algorithm: LEAST_CONNECTIONS
+      protocol: HTTPS
+      listener: { get_resource: listener_ssl }
+
+  pool_galera:
+    type: OS::Octavia::Pool
+    properties:
+      lb_algorithm: SOURCE_IP
+      protocol: TCP
+      listener: { get_resource: listener_galera }
+
+  listener:
+    type: OS::Octavia::Listener
+    properties:
+      loadbalancer: { get_resource: loadbalancer }
+      protocol: HTTP
+      protocol_port: 80
+
+  listener_ssl:
+    type: OS::Octavia::Listener
+    properties:
+      loadbalancer: { get_resource: loadbalancer }
+      protocol: HTTPS
+      protocol_port: 443
+
+  listener_galera:
+    type: OS::Octavia::Listener
+    properties:
+      loadbalancer: { get_resource: loadbalancer }
+      protocol: TCP
+      protocol_port: 3306
+
+  loadbalancer:
+    type: OS::Octavia::LoadBalancer
+    properties:
+      vip_subnet: { get_resource: private_subnet }
+
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_param: public_net }
+      port_id: { get_attr: [loadbalancer, vip_port_id ]}
+
+outputs:
+  balancer_public_vip:
+    description: The floating IP address of the deployed lb
+    value: { get_attr: [floating_ip, floating_ip_address] }
+  balancer_private_vip:
+    description: The private VIP address of the deployed lb
+    value: { get_attr: [loadbalancer, vip_address] }

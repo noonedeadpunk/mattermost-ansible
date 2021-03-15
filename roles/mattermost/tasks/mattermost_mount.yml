@@ -1,0 +1,20 @@
+---
+
+- name: Install packages
+  package:
+    name: "{{ mattermost_mount_packages }}"
+    state: present
+
+- include_role:
+    name: systemd_mount
+  vars:
+    systemd_mounts:
+      - what: "{{ mattermost_mount_src }}"
+        where: /opt/mattermost_special
+        type: "{{ mattermost_mount_type }}"
+        owner: "{{ mattermost_user }}"
+        group: "{{ mattermost_user }}"
+        options: "{{ mattermost_mount_options }}"
+        credentials: "{{ mattermost_mount_credentials }}"
+        state: started
+        enabled: true

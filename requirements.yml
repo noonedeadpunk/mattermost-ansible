@@ -9,3 +9,7 @@
 - name: apt_package_pinning
   scm: git
   src: https://opendev.org/openstack/openstack-ansible-apt_package_pinning
+
+- name: systemd_mount
+  scm: git
+  src: https://github.com/openstack/ansible-role-systemd_mount

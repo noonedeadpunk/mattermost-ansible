@@ -2,6 +2,8 @@
 db_user: mmmost
 db_name: mattermost
 
+mattermost_version: 5.31.0
+mattermost_package_url: https://releases.mattermost.com/{{ mattermost_version }}/mattermost-{{ mattermost_version }}-linux-amd64.tar.gz
 mattermost_postgres: true
 # Choose a secure password. It is recommended you create a random password using
 # an external utility.
@@ -15,7 +17,11 @@ db_mysql_options: "charset=utf8mb4,utf8&readTimeout=30s&writeTimeout=30s"
 
 mattermost_special:
   - config
-  - logs
   - plugins
   - client/plugins
   - data
+
+mattermost_mount_src: ""
+mattermost_mount_type: "nfs"
+mattermost_mount_options: "_netdev,auto"
+mattermost_mount_credentials: ''

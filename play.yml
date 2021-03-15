@@ -25,11 +25,18 @@
       failed_when: false
       when: not mattermost_postgres | bool
 
+- name: Gather facts
+  hosts: all
+  gather_facts: True
+  tags:
+    - always
+
 # Define the host you want to run the playbook in a file called hosts
 # run "ansible-playbook play.yml -i hosts" from this directory
 - hosts: all
   serial: [1, '100%']
   gather_facts: no
+  become: true
   pre_tasks:
     - name: Install python
       raw: test -e /usr/bin/python || (apt -y update && apt install -y python3-minimal)
@@ -39,31 +46,37 @@
       setup:
 
   vars:
-    mattermost_version: 5.27.0
     postgres_version: 9.6
 
     # The user the mattermost process will run as. The group will match.
     mattermost_user: mattermost
 
-    mattermost_postgres: True
+    mattermost_postgres: true
 
     # Whether to install galera or postgres
     galera_install_server: "{{ not mattermost_postgres | bool }}"
     galera_install_client: "{{ not mattermost_postgres | bool }}"
-    galera_root_password: "secrete"
     galera_cluster_name: mm_galera_cluster
+    db_host: 192.168.10.184
 
-    db_password: notReallyPassword
-    db_host: 127.0.0.1
+    # Passwords that needs to be set
+    # galera_root_password: "secrete"
+    # db_password: notReallyPassword
+    # mattermost_mount_credentials: ""
 
     nginx_install: True
 
     # This is the email address you want to be attached to the letsencrypt certificate. It should be valid.
-    cert_email_address: abc@123.com
+    cert_email_address: mattermost@citynetwork.eu
     # source will pull certbot git repo, distro will try to install certbot from packages
-    cert_method: source
-    # cert_domain: domain.com
+    cert_method: distro
+    cert_domain: mm.citynetwork.eu
     cert_local_path: "{{ ansible_env.HOME }}/.ansible/ssl"
+
+    mattermost_mount_type: fuse.s3fs
+    mattermost_mount_src: "mattermost_shared"
+    mattermost_mount_options: "_netdev,allow_other,use_path_request_style,url=https://swift-sto1hs.citycloud.com:8080"
+
   tasks:
     - include_role:
         name: postgres
@@ -71,7 +84,7 @@
     - include_role:
         name: galera_server
       when: not mattermost_postgres | bool
-    - include_role:
+    - import_role:
         name: mattermost
     - include_role:
         name: nginx

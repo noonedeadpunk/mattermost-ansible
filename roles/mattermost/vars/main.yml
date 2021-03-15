@@ -1,0 +1,10 @@
+---
+
+mattermost_mount_packages: |-
+  {% set packages = [] %}
+  {% if mattermost_mount_type == 'nfs' %}
+  {%   set _ = packages.append('nfs-common') %}
+  {% elif mattermost_mount_type == 'ceph' %}
+  {%   set _ = packages.append('ceph-fuse') %}
+  {% endif %}
+  {{ packages }}

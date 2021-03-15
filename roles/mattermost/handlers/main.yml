@@ -1,6 +1,33 @@
 ---
+- name: Stop nginx
+  service:
+    name: nginx
+    state: stopped
+  when: nginx_install | default(False)
+  listen:
+    - restart mattermost
+
 - name: restart mattermost
   service:
     name: mattermost
     enabled: yes
     state: restarted
+
+- name: Wait for mattermost to start
+  uri:
+    url: http://127.0.0.1:8065
+    timeout: 5
+  register: mattermost_wait
+  until: mattermost_wait is success
+  retries: 100
+  delay: 5
+  listen:
+    - restart mattermost
+
+- name: Start nginx
+  service:
+    name: nginx
+    state: started
+  when: nginx_install | default(False)
+  listen:
+    - restart mattermost
