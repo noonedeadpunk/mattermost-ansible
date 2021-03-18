@@ -10,7 +10,7 @@
     - name: define letsencrypt binary path
       set_fact:
         letsencrypt_path: /usr/bin/letsencrypt
-        letsencrypt_method: nginx
+        letsencrypt_method: webroot
 
   rescue:
     - name: Install git
@@ -41,11 +41,16 @@
         letsencrypt_path: /opt/letsencrypt/letsencrypt-auto
         letsencrypt_method: standalone
 
-- name: Create /etc/letsencrypt directory
+- name: Create /etc/letsencrypt directories
   file:
-    path: /etc/letsencrypt
+    path: "{{ item.path }}"
     state: directory
     mode: '0755'
+  when: item.condition | default(True)
+  with_items:
+    - path: /etc/letsencrypt
+    - path: /opt/mattermost_special/letsencrypt
+      condition: "{{ (letsencrypt_method == 'webroot') }}"
 
 - name: Create letsencrypt config file /etc/letsencrypt/cli.ini
   template:
@@ -110,5 +115,5 @@
     hour: "23"
     month: "*"
     day: "15"
-    job: "systemctl stop nginx && {{ letsencrypt_path }} renew --quiet --no-self-upgrade && systemctl start nginx"
+    job: "{{ letsencrypt_path }} renew --quiet --no-self-upgrade && systemctl reload nginx"
   when: (ansible_os_family == "RedHat" and ansible_distribution_major_version is version("7", ">=")) or (ansible_distribution == "Ubuntu" and ansible_distribution_major_version is version("16", ">=")) or (ansible_distribution == "Debian" and ansible_distribution_major_version is version("8", ">="))

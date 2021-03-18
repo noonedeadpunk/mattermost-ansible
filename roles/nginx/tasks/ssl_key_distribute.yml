@@ -2,22 +2,48 @@
 
 - name: Create destination directories
   file:
-    path: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}"
+    path: "{{ item }}"
     mode: "0755"
     state: directory
+  with_items:
+    - "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}"
+    - "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}"
+    - "{{ hostvars[groups['all'][0]]['letsencrypt_account_path_fact'] }}"
 
-- name: Distribute self signed ssl key
+- name: Distribute lets encrypt files
   copy:
-    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/privkey.pem"
-    content: "{{ hostvars[groups['all'][0]]['ssl_key_fact'] | b64decode }}"
+    dest: "{{ item.dest }}"
+    content: "{{ item.content }}"
     owner: "root"
     group: "root"
     mode: "0640"
+  with_items:
+    - dest: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/privkey1.pem"
+      content: "{{ hostvars[groups['all'][0]]['ssl_key_fact'] | b64decode }}"
+    - dest: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/cert1.pem"
+      content: "{{ hostvars[groups['all'][0]]['ssl_cert_fact'] | b64decode }}"
+    - dest: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/chain1.pem"
+      content: "{{ hostvars[groups['all'][0]]['ssl_chain_fact'] | b64decode }}"
+    - dest: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/fullchain1.pem"
+      content: "{{ hostvars[groups['all'][0]]['ssl_fullchain_fact'] | b64decode }}"
+    - dest: "{{ hostvars[groups['all'][0]]['letsencrypt_account_path_fact'] }}/meta.json"
+      content: "{{ hostvars[groups['all'][0]]['letsencrypt_meta_fact'] | b64decode }}"
+    - dest: "{{ hostvars[groups['all'][0]]['letsencrypt_account_path_fact'] }}/private_key.json"
+      content: "{{ hostvars[groups['all'][0]]['letsencrypt_key_fact'] | b64decode }}"
+    - dest: "{{ hostvars[groups['all'][0]]['letsencrypt_account_path_fact'] }}/regr.json"
+      content: "{{ hostvars[groups['all'][0]]['letsencrypt_regr_fact'] | b64decode }}"
 
-- name: Distribute self signed ssl cert
-  copy:
-    dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"
-    content: "{{ hostvars[groups['all'][0]]['ssl_cert_fact'] | b64decode }}"
-    owner: "root"
-    group: "root"
-    mode: "0640"
+- name: Make certificate symlinks
+  file:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    state: link
+  with_items:
+    - src: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/privkey1.pem"
+      dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/privkey.pem"
+    - src: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/cert1.pem"
+      dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/cert.pem"
+    - src: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/chain1.pem"
+      dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/chain.pem"
+    - src: "/etc/letsencrypt/archive/{{ cert_domain | default(ansible_fqdn) }}/fullchain1.pem"
+      dest: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"

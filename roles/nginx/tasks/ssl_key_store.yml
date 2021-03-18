@@ -1,9 +1,9 @@
 ---
 
-- name: Store ssl cert
+- name: Store ssl fullchain
   slurp:
     src: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/fullchain.pem"
-  register: _ssl_cert
+  register: _ssl_fullchain
   changed_when: false
 
 - name: Store ssl key
@@ -12,7 +12,50 @@
   register: _ssl_key
   changed_when: false
 
+- name: Store ssl cert
+  slurp:
+    src: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/cert.pem"
+  register: _ssl_cert
+  changed_when: false
+
+- name: Store ssl chain
+  slurp:
+    src: "/etc/letsencrypt/live/{{ cert_domain | default(ansible_fqdn) }}/chain.pem"
+  register: _ssl_chain
+  changed_when: false
+
+- name: Store letsencrypt renewal
+  slurp:
+    src: "/etc/letsencrypt/renewal/{{ cert_domain | default(ansible_fqdn) }}.conf"
+  register: _letsencrypt_renewal
+
 - name: Register a fact for the cert and key
   set_fact:
-     ssl_cert_fact: "{{ _ssl_cert.content }}"
-     ssl_key_fact: "{{ _ssl_key.content }}"
+    ssl_cert_fact: "{{ _ssl_cert.content }}"
+    ssl_key_fact: "{{ _ssl_key.content }}"
+    ssl_fullchain_fact: "{{ _ssl_fullchain.content }}"
+    ssl_chain_fact: "{{ _ssl_chain.content }}"
+    letsencrypt_account: "{{ (_letsencrypt_renewal.content | b64decode | regex_search('account = (.*)')).split()[-1] }}"
+    letsencrypt_server: "{{ (_letsencrypt_renewal.content | b64decode | regex_search('server = (.*)')).split('https://')[-1] }}"
+    letsencrypt_account_path: "/etc/letsencrypt/accounts/{{ letsencrypt_server }}/{{ letsencrypt_account }}"
+
+- name: Store letsencrypt account meta
+  slurp:
+    src: "{{ letsencrypt_account_path }}/meta.json"
+  register: _letsencrypt_meta
+
+- name: Store letsencrypt account key
+  slurp:
+    src: "{{ letsencrypt_account_path }}/private_key.json"
+  register: _letsencrypt_key
+
+- name: Store letsencrypt account regr
+  slurp:
+    src: "{{ letsencrypt_account_path }}/regr.json"
+  register: _letsencrypt_regr
+
+- name: Register letsencrypt account facts
+  set_fact:
+    letsencrypt_meta: "{{ _letsencrypt_meta.content }}"
+    letsencrypt_key: "{{ letsencrypt_key.content }}"
+    letsencrypt_regr:  "{{ letsencrypt_regr.content }}"

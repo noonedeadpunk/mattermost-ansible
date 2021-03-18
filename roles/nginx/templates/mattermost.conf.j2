@@ -10,7 +10,7 @@ server {
    server_name   {{ cert_domain | default(ansible_fqdn) }};
 
    location /.well-known {
-      root /usr/share/nginx/html/.well-known;
+      root /opt/mattermost_special/letsencrypt;
    }
 
    location / {

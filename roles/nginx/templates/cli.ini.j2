@@ -5,5 +5,6 @@ email = {{ cert_email_address }}
 domains = {{ cert_domain | default(ansible_fqdn) }}
 
 authenticator = {{ letsencrypt_method }}
-#webroot-path = /usr/share/nginx/html
-
+{% if letsencrypt_method == 'webroot' %}
+webroot-path = /opt/mattermost_special/letsencrypt/
+{% endif %}
